@@ -5,6 +5,7 @@ import { authRouter } from './routes/auth.js';
 import { keysRouter } from './routes/keys.js';
 import { statsRouter } from './routes/stats.js';
 import { billingRouter } from './routes/billing.js';
+import { webhookRouter } from './routes/webhooks.js';
 
 export function loadConfig(env = process.env) {
   const jwtSecret = env.JWT_SECRET || '';
@@ -24,11 +25,23 @@ export function loadConfig(env = process.env) {
     mockUpstream: env.MOCK_UPSTREAM || false,
     upstreamBaseUrl: (env.UPSTREAM_BASE_URL || '').replace(/\/$/, ''),
     upstreamApiKey: env.UPSTREAM_API_KEY || '',
+    stripeSecretKey: env.STRIPE_SECRET_KEY || '',
+    stripeWebhookSecret: env.STRIPE_WEBHOOK_SECRET || '',
   };
 }
 
-export function createApp({ pool, config }) {
+export function createApp({ pool, config, stripeClient } = {}) {
   const app = express();
+  // Stripe webhooks need the exact raw bytes for signature verification —
+  // mount BEFORE the global JSON parser.
+  // Stripe webhooks need the exact raw bytes for signature verification —
+  // the raw parser runs for that path only, BEFORE the global JSON parser.
+  // NOTE: webhookRouter is mounted before the auth-guarded routers on purpose.
+  // Every other router does a bare router.use(requireAuth(...)) at root, which
+  // intercepts ALL downstream requests — an unauthenticated route mounted
+  // after them would 401. Keep public (non-JWT) routes above this line.
+  app.use('/api/webhooks/stripe', express.raw({ type: 'application/json', limit: '2mb' }));
+  app.use(webhookRouter({ pool, config, stripeClient }));
   app.use(express.json({ limit: '2mb' }));
   // Trust the platform proxy (Render) so req.ip is the real client IP for login throttling.
   app.set('trust proxy', 1);
@@ -40,7 +53,7 @@ export function createApp({ pool, config }) {
   app.use(keysRouter({ pool, config }));
   app.use(auditRouter({ pool, config }));
   app.use(statsRouter({ pool, config }));
-  app.use(billingRouter({ pool, config }));
+  app.use(billingRouter({ pool, config, stripeClient }));
 
   app.use((req, res) => res.status(404).json({ error: { message: 'Not found' } }));
 

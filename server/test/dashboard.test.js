@@ -230,9 +230,9 @@ describe('GET /api/billing/summary', () => {
     expect(res.body.plan).toMatchObject({ name: 'starter', price_cents: 1900, included_tokens: 1000000 });
     expect(res.body.period.used_tokens).toBe(2500000);
     expect(res.body.period.overage_tokens).toBe(1500000);
-    // 1500000/1000 * 20c = 30000c = $300.
-    expect(res.body.period.overage_estimate_cents).toBe(30000);
-    expect(res.body.stripe).toBeNull();
+    // 1500000/1000 * $0.002 = $3.00 = 300c.
+    expect(res.body.period.overage_estimate_cents).toBe(300);
+    expect(res.body.stripe_customer).toBeNull();
   });
 
   it('zero overage when under the included tokens', async () => {

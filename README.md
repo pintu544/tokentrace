@@ -123,7 +123,7 @@ curl -s "$TT/v1/proxy/upstream/s2s/v2.0/task/hat/<task_id>" -H "x-api-key: $KEY"
 - **Slice 1** ✅ — proxy core, key issuance/verification, usage metering, mock upstream, migrations
 - **Slice 2** ✅ — PII redaction, audit-log writes, quotas + rate limits (429), audit search, retention purge
 - **Slice 3** ✅ — Next.js dashboard (JWT auth + admin/viewer RBAC, overview charts, keys management, audit search, billing summary)
-- **Slice 4** — Stripe test-mode metered billing + invoices
+- **Slice 4** ✅ — Stripe test-mode metered billing: plans (Starter $19/1M, Pro $79/10M, $0.002/1K overage), idempotent nightly billing job (`npm run billing [--dry-run]`), invoice items + finalized invoices, `invoice.paid`/`payment_failed` webhooks, plans sync (`npm run plans:sync`)
 - **Slice 5** — hardening, professional docs, Render deploy
 - **Slice 6** — Devpost submission + demo video
 
