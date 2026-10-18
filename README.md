@@ -77,6 +77,39 @@ Set `UPSTREAM_BASE_URL` + `UPSTREAM_API_KEY` and unset `MOCK_UPSTREAM` to proxy 
 OpenAI-compatible endpoint. Token counts come from the upstream `usage` block when
 present, otherwise estimated as `ceil(chars/4)` (disclosed approximation).
 
+### REST passthrough (non-chat AI APIs)
+
+Not every AI API speaks chat completions. `ANY /v1/proxy/upstream/*` forwards the
+method, path, query string and body to `${UPSTREAM_BASE_URL}`, injecting your
+server-side upstream key as `Authorization: Bearer` (your customer's `x-api-key`
+is TokenTrace's key and is never forwarded). Same enforcement as the chat path:
+key verify → rate limit → quota → forward → meter + audit in one transaction.
+
+Metering: REST upstreams expose no token usage, so "tokens" are size-estimated
+(`ceil(bytes/4)`, request bytes = prompt, response bytes = completion) — not
+model-counted. Binary bodies are never stored in the audit log; only
+`{content_type, byte_size, sha256_prefix}` metadata is kept.
+
+YouCam virtual try-on flow through the proxy (grant API, task-based):
+
+```bash
+TT=https://your-api.onrender.com   # or localhost:4000 in mock mode
+KEY=<redacted>      # a TokenTrace key you issued
+
+# 1. Upload the customer's photo
+curl -s $TT/v1/proxy/upstream/s2s/v2.0/file \
+  -H "x-api-key: $KEY" -F "file=@face.jpg"
+
+# 2. Create the try-on task (response echoes the upstream task_id)
+curl -s $TT/v1/proxy/upstream/s2s/v2.0/task \
+  -H "x-api-key: $KEY" -H 'Content-Type: application/json' \
+  -d '{"file_id":"<id-from-step-1>","sku":"hat-001"}'
+
+# 3. Poll until done — every call is metered against the customer's key
+curl -s "$TT/v1/proxy/upstream/s2s/v2.0/task?task_id=<id>" \
+  -H "x-api-key: $KEY"
+```
+
 ## Roadmap
 
 - **Slice 1** ✅ — proxy core, key issuance/verification, usage metering, mock upstream, migrations
