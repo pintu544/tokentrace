@@ -1,9 +1,8 @@
 import { Router } from 'express';
-import { authStub } from '../middleware/authStub.js';
+import { requireAuth } from '../middleware/auth.js';
 
 /**
- * Dashboard audit-log API (Slice 2).
- * Auth is a placeholder stub — Slice 3 installs real JWT auth + RBAC.
+ * Dashboard audit-log API (Slice 2; auth hardened in Slice 3).
  *
  * GET /api/audit?key_id=&from=&to=&model=&q=&limit=&offset=
  *   key_id : integer, filter to one API key
@@ -12,10 +11,10 @@ import { authStub } from '../middleware/authStub.js';
  *   q      : free-text ILIKE over the redacted request/response JSON
  *   limit  : default 50, max 500 · offset: default 0
  */
-export function auditRouter({ pool }) {
+export function auditRouter({ pool, config }) {
   const router = Router();
 
-  router.use(authStub);
+  router.use(requireAuth({ jwtSecret: config.jwtSecret }));
 
   router.get('/api/audit', async (req, res) => {
     const where = [];

@@ -1,0 +1,69 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+body {
+  @apply bg-ink text-slate-200 antialiased;
+}
+
+.card {
+  @apply bg-panel border border-line rounded-xl p-5;
+}
+
+.input {
+  @apply bg-ink border border-line rounded-lg px-3 py-2 text-sm w-full
+    placeholder:text-dim focus:outline-none focus:border-sky-500;
+}
+
+.btn {
+  @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium
+    bg-sky-600 hover:bg-sky-500 text-white disabled:opacity-50 disabled:cursor-not-allowed;
+}
+
+.btn-ghost {
+  @apply inline-flex items-center justify-center gap-2 rounded-lg px-3 py-1.5 text-sm
+    border border-line hover:bg-line text-slate-300;
+}
+
+.btn-danger {
+  @apply inline-flex items-center justify-center gap-2 rounded-lg px-3 py-1.5 text-sm
+    border border-red-900 text-red-400 hover:bg-red-950;
+}
+
+.label {
+  @apply block text-xs font-medium text-dim mb-1.5 uppercase tracking-wide;
+}
+
+table.data {
+  @apply w-full text-sm;
+}
+table.data th {
+  @apply text-left text-xs uppercase tracking-wide text-dim font-medium pb-3 pr-4;
+}
+table.data td {
+  @apply py-3 pr-4 border-t border-line align-top;
+}
+
+.badge {
+  @apply inline-block rounded-full px-2.5 py-0.5 text-xs font-medium;
+}
+.badge-admin {
+  @apply bg-sky-950 text-sky-300 border border-sky-800;
+}
+.badge-viewer {
+  @apply bg-slate-800 text-slate-300 border border-line;
+}
+.badge-live {
+  @apply bg-emerald-950 text-emerald-300 border border-emerald-800;
+}
+.badge-revoked {
+  @apply bg-red-950 text-red-400 border border-red-900;
+}
+
+pre.code {
+  @apply bg-ink border border-line rounded-lg p-3 text-xs overflow-x-auto whitespace-pre-wrap break-words;
+}

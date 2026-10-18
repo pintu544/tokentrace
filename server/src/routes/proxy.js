@@ -17,6 +17,13 @@ export function proxyRouter({ pool, config }) {
         .json({ error: { message: 'Invalid or revoked API key', type: 'authentication_error' } });
     }
 
+    // Best-effort last-used tracking; never fail a customer request for it.
+    try {
+      await pool.query('UPDATE api_keys SET last_used_at = now() WHERE id = $1', [keyRow.id]);
+    } catch (err) {
+      console.warn('last_used_at update failed:', err.message);
+    }
+
     // Enforce limits BEFORE forwarding — never burn upstream budget on a call
     // we are going to reject. Rejected calls are neither metered nor audited.
     const rate = await checkRateLimit(pool, keyRow);

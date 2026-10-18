@@ -1,0 +1,1 @@
+{"dependencies":{"next":"^14.2.0","react":"^18.3.1","react-dom":"^18.3.1"},"devDependencies":{"autoprefixer":"^10.4.20","postcss":"^8.4.47","tailwindcss":"^3.4.13"},"engines":{"node":">=20"},"name":"tokentrace-dashboard","private":true,"scripts":{"build":"next build","dev":"next dev","start":"next start"},"version":"0.1.0"}

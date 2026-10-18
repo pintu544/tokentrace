@@ -15,17 +15,26 @@ Customer app ──x-api-key──▶ TokenTrace API (Express + Postgres)
                                ├─ key verify (sha256)
                                ├─ forward → upstream LLM (OpenAI-compatible)
                                └─ usage event → Postgres
-Dashboard (Next.js, Slice 3) ──JWT──▶ same API (/api/*)
+Dashboard (Next.js) ──JWT──▶ same API (/api/*)
 Stripe (test mode, Slice 4) ◀── nightly billing job
 ```
+
+The dashboard never talks to the API from the browser: Next.js route handlers
+proxy `/api/*` with the session JWT (first-party httpOnly cookie), so no CORS
+is needed.
 
 ## Repo layout
 
 - `server/` — Express API: proxy route, key management, migrations, tests
   - `server/src/` — app entry, routes, lib, db
-  - `server/migrations/` — versioned SQL (`001_…` → `005_…`)
+  - `server/migrations/` — versioned SQL (`001_…` → `006_…`)
   - `server/test/` — vitest suite (runs on in-memory Postgres via pg-mem)
-- `client/` — Next.js dashboard (Slice 3)
+- `dashboard/` — Next.js 14 dashboard (App Router, Tailwind): login (JWT httpOnly
+  cookie), Overview (usage stats + 30-day chart + top keys), API Keys
+  (issue/show-once/revoke, quota config, admin-only writes), Audit Log
+  (search + filters + expandable redacted rows), Billing (plan vs usage,
+  overage estimate — Stripe wiring lands in Slice 4). Browser → Next.js
+  `/api/*` proxy → Express; `API_URL` env (server-side only).
 
 ## Local setup (mock upstream — no API keys needed)
 
@@ -35,6 +44,15 @@ npm install
 cp ../.env.example .env   # then set DATABASE_URL to a real Postgres
 npm run seed              # creates the admin user (migrations run automatically on start)
 MOCK_UPSTREAM=true npm start
+```
+
+Dashboard (needs the API running):
+
+```bash
+cd dashboard
+npm install
+cp .env.example .env.local  # API_URL=http://localhost:4000
+npm run dev                 # http://localhost:3000 — log in with the seeded admin
 ```
 
 With no Postgres handy, the test suite covers the whole Slice 1 surface on an
@@ -62,8 +80,8 @@ present, otherwise estimated as `ceil(chars/4)` (disclosed approximation).
 ## Roadmap
 
 - **Slice 1** ✅ — proxy core, key issuance/verification, usage metering, mock upstream, migrations
-- **Slice 2** — PII redaction, audit-log writes, quotas + rate limits (429), audit search, retention purge
-- **Slice 3** — Next.js dashboard (auth, charts, keys, audit search, RBAC)
+- **Slice 2** ✅ — PII redaction, audit-log writes, quotas + rate limits (429), audit search, retention purge
+- **Slice 3** ✅ — Next.js dashboard (JWT auth + admin/viewer RBAC, overview charts, keys management, audit search, billing summary)
 - **Slice 4** — Stripe test-mode metered billing + invoices
 - **Slice 5** — hardening, professional docs, Render deploy
 - **Slice 6** — Devpost submission + demo video
