@@ -6,6 +6,7 @@ import { keysRouter } from './routes/keys.js';
 import { statsRouter } from './routes/stats.js';
 import { billingRouter } from './routes/billing.js';
 import { webhookRouter } from './routes/webhooks.js';
+import { securityHeaders, corsGuard } from './middleware/security.js';
 
 export function loadConfig(env = process.env) {
   const jwtSecret = env.JWT_SECRET || '';
@@ -27,11 +28,26 @@ export function loadConfig(env = process.env) {
     upstreamApiKey: env.UPSTREAM_API_KEY || '',
     stripeSecretKey: env.STRIPE_SECRET_KEY || '',
     stripeWebhookSecret: env.STRIPE_WEBHOOK_SECRET || '',
+    // Comma-separated allowlist for browser CORS. Empty = default deny.
+    // The reference dashboard calls the API server-side (Next.js route
+    // handlers), so this normally stays empty.
+    corsOrigins: (env.CORS_ORIGIN || '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean),
+    // Cap for non-JSON request bodies on the REST passthrough (image uploads
+    // etc.). JSON bodies are capped separately at 2mb by express.json().
+    restBodyLimitBytes: Number(env.REST_BODY_LIMIT_MB || 10) * 1024 * 1024,
   };
 }
 
 export function createApp({ pool, config, stripeClient } = {}) {
   const app = express();
+  app.disable('x-powered-by');
+  // Security headers + CORS go first so every response (including 404s and
+  // errors) carries them.
+  app.use(securityHeaders());
+  app.use(corsGuard({ allowedOrigins: config.corsOrigins || [] }));
   // Stripe webhooks need the exact raw bytes for signature verification —
   // mount BEFORE the global JSON parser.
   // Stripe webhooks need the exact raw bytes for signature verification —
@@ -62,6 +78,12 @@ export function createApp({ pool, config, stripeClient } = {}) {
     if (err?.type === 'entity.parse.failed') {
       return res.status(400).json({ error: { message: 'Invalid JSON body' } });
     }
+    if (err?.status === 413 || err?.type === 'entity.too.large') {
+      return res.status(413).json({ error: { message: 'Request body too large' } });
+    }
+    // Never leak stack traces or internals to clients — log server-side,
+    // return a generic 500. This holds in every NODE_ENV, including dev.
+    console.error('Unhandled error:', err?.message);
     res.status(500).json({ error: { message: 'Internal server error' } });
   });
 

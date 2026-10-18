@@ -1,4 +1,4 @@
-import { randomBytes, createHash } from 'node:crypto';
+import { randomBytes, createHash, timingSafeEqual } from 'node:crypto';
 
 export const KEY_PREFIX_LABEL = 'tt_live_';
 const BASE62 = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
@@ -45,14 +45,35 @@ export async function createApiKey(
   return { ...rows[0], key };
 }
 
-/** Verify a presented key. Returns the key row, or null when unknown/malformed/revoked. */
+/**
+ * Verify a presented key. Returns the key row, or null when unknown/malformed/revoked.
+ *
+ * Timing safety: we look up candidates by display prefix (tt_live_ + 8 chars,
+ * not secret) and compare the sha256 digests with crypto.timingSafeEqual.
+ * Comparing via `WHERE key_hash = $1` instead would leak key existence through
+ * database timing noise; the secret comparison itself here is constant-time.
+ * Prefix collisions are possible (8 chars) so every candidate is compared.
+ */
 export async function verifyApiKey(pool, key) {
   if (!key || typeof key !== 'string' || !key.startsWith(KEY_PREFIX_LABEL)) return null;
+  const keyPrefix = key.slice(0, KEY_PREFIX_LABEL.length + 8);
   const { rows } = await pool.query(
-    'SELECT * FROM api_keys WHERE key_hash = $1 AND revoked_at IS NULL',
-    [hashKey(key)]
+    'SELECT * FROM api_keys WHERE key_prefix = $1 AND revoked_at IS NULL',
+    [keyPrefix]
   );
-  return rows[0] || null;
+  const presented = Buffer.from(hashKey(key), 'hex');
+  for (const row of rows) {
+    let stored;
+    try {
+      stored = Buffer.from(row.key_hash, 'hex');
+    } catch {
+      continue;
+    }
+    if (stored.length === presented.length && timingSafeEqual(stored, presented)) {
+      return row;
+    }
+  }
+  return null;
 }
 
 /** Revoke a key. Returns true when a live key was revoked. */

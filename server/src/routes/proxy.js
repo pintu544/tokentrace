@@ -9,10 +9,12 @@ import { redactValue } from '../lib/redact.js';
 
 /**
  * Read the request body for the REST passthrough. JSON bodies were already
- * parsed by express.json(); anything else (multipart uploads, raw bytes) is
- * read from the stream untouched so boundaries/encodings survive.
+ * parsed by express.json() (2mb limit there); anything else (multipart uploads,
+ * raw bytes) is read from the stream untouched so boundaries/encodings survive —
+ * but bounded by maxBytes, because an unbounded stream read is a trivial
+ * memory-exhaustion DoS. Oversized bodies get a 413, never a silent truncation.
  */
-async function readRestBody(req) {
+async function readRestBody(req, maxBytes) {
   const contentType = req.get('content-type') || '';
   if (
     contentType.includes('application/json') &&
@@ -23,7 +25,16 @@ async function readRestBody(req) {
     return { buffer: Buffer.from(JSON.stringify(req.body), 'utf8'), isJson: true };
   }
   const chunks = [];
-  for await (const chunk of req) chunks.push(chunk);
+  let size = 0;
+  for await (const chunk of req) {
+    size += chunk.length;
+    if (size > maxBytes) {
+      const err = new Error('Request body too large');
+      err.status = 413;
+      throw err;
+    }
+    chunks.push(chunk);
+  }
   return { buffer: Buffer.concat(chunks), isJson: false };
 }
 
@@ -196,7 +207,18 @@ export function proxyRouter({ pool, config }) {
       ? req.originalUrl.split('?').slice(1).join('?')
       : '';
     const contentType = req.get('content-type') || '';
-    const { buffer: reqBuffer, isJson } = await readRestBody(req);
+    let reqBuffer;
+    let isJson;
+    try {
+      ({ buffer: reqBuffer, isJson } = await readRestBody(req, config.restBodyLimitBytes));
+    } catch (err) {
+      if (err.status === 413) {
+        return res
+          .status(413)
+          .json({ error: { message: 'Request body too large', type: 'body_too_large' } });
+      }
+      throw err;
+    }
 
     let upstream;
     try {
