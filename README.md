@@ -90,24 +90,32 @@ Metering: REST upstreams expose no token usage, so "tokens" are size-estimated
 model-counted. Binary bodies are never stored in the audit log; only
 `{content_type, byte_size, sha256_prefix}` metadata is kept.
 
-YouCam virtual try-on flow through the proxy (grant API, task-based):
+YouCam virtual try-on flow through the proxy (grant API, task-based).
+Verified live 2026-10-18: file API ×2 → S3 PUTs → task create, all through
+the proxy with Bearer injection (task itself needs grant units on the key):
 
 ```bash
-TT=https://your-api.onrender.com   # or localhost:4000 in mock mode
+TT=https://your-api.onrender.com   # or localhost:4000 for local
 KEY=<redacted>      # a TokenTrace key you issued
 
-# 1. Upload the customer's photo
-curl -s $TT/v1/proxy/upstream/s2s/v2.0/file \
-  -H "x-api-key: $KEY" -F "file=@face.jpg"
-
-# 2. Create the try-on task (response echoes the upstream task_id)
-curl -s $TT/v1/proxy/upstream/s2s/v2.0/task \
+# 1. Ask the File API for an upload slot (proxied; Bearer injected server-side)
+curl -s $TT/v1/proxy/upstream/s2s/v2.0/file/hat \
   -H "x-api-key: $KEY" -H 'Content-Type: application/json' \
-  -d '{"file_id":"<id-from-step-1>","sku":"hat-001"}'
+  -d '{"files":[{"content_type":"image/jpg","file_name":"selfie.jpg","file_size":37005}]}'
+# → {status:200, data:{files:[{file_id:"...", requests:[{method:"PUT", url:"<s3-presigned>"}]}]}}
 
-# 3. Poll until done — every call is metered against the customer's key
-curl -s "$TT/v1/proxy/upstream/s2s/v2.0/task?task_id=<id>" \
-  -H "x-api-key: $KEY"
+# 2. PUT the bytes to the presigned S3 URL (direct — not proxied, no AI units)
+curl -s -X PUT '<s3-presigned-url>' -H 'Content-Type: image/jpg' --data-binary @selfie.jpg
+
+# 3. Create ONE try-on task (proxied; consumes 1 grant unit on success)
+curl -s $TT/v1/proxy/upstream/s2s/v2.0/task/hat \
+  -H "x-api-key: $KEY" -H 'Content-Type: application/json' \
+  -d '{"src_file_id":"<selfie-file-id>","ref_file_id":"<hat-file-id>","gender":"female","style":"random"}'
+# → {status:200, data:{task_id:"..."}}
+
+# 4. Poll until success — every call is metered against the customer's key
+curl -s "$TT/v1/proxy/upstream/s2s/v2.0/task/hat/<task_id>" -H "x-api-key: $KEY"
+# → {status:200, data:{task_status:"success", results:{url:"<result-image>"}}}
 ```
 
 ## Roadmap
