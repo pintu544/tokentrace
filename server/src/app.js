@@ -1,5 +1,6 @@
 import express from 'express';
 import { proxyRouter } from './routes/proxy.js';
+import { auditRouter } from './routes/audit.js';
 
 export function loadConfig(env = process.env) {
   return {
@@ -18,6 +19,7 @@ export function createApp({ pool, config }) {
   app.get('/health', (req, res) => res.json({ ok: true, service: 'tokentrace-api' }));
 
   app.use(proxyRouter({ pool, config }));
+  app.use(auditRouter({ pool }));
 
   app.use((req, res) => res.status(404).json({ error: { message: 'Not found' } }));
 
